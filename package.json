@@ -1,0 +1,28 @@
+{
+  "name": "frontend-interview",
+  "version": "1.0.0",
+  "workspaces": [
+    "applications/*"
+  ],
+  "dependencies": {
+    "prettier": "^3.6.2"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "dev:client": "npm run dev --workspace=@frontend-interview/next-boilerplate-client",
+    "dev:server": "npm run dev --workspace=@frontend-interview/graphql-server"
+  },
+  "prettier": {
+    "trailingComma": "all",
+    "tabWidth": 2,
+    "semi": false,
+    "singleQuote": true
+  },
+  "lint-staged": {
+    "**/*": "prettier --write --ignore-unknown"
+  }
+}
