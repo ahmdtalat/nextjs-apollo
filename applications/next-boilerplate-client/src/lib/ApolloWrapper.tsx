@@ -1,11 +1,13 @@
 'use client'
 
 import { HttpLink } from '@apollo/client'
+import { createCache } from './apolloCache'
 import {
-  ApolloNextAppProvider,
   ApolloClient,
-  InMemoryCache,
+  ApolloNextAppProvider,
 } from '@apollo/client-integration-nextjs'
+
+// #################################################################################################
 
 function makeClient() {
   const httpLink = new HttpLink({
@@ -14,10 +16,12 @@ function makeClient() {
   })
 
   return new ApolloClient({
-    cache: new InMemoryCache(),
+    cache: createCache(),
     link: httpLink,
   })
 }
+
+// #################################################################################################
 
 export default function ApolloWrapper({ children }: React.PropsWithChildren) {
   return (
