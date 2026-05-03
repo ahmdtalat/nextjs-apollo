@@ -17,11 +17,13 @@ export interface MultiSelectProps<T> {
   error?: string | null
   onCancel?: () => void
   onLoadMore?: () => void
+  allSelectedLabel?: string
+  selectAllActive?: boolean
   getId: (item: T) => string
   getLabel: (item: T) => string
   onSearchChange: (value: string) => void
   selectedLabel: (count: number) => string
-  onApply: (selectedIds: string[]) => void
+  onApply: (selectedIds: string[], meta: { selectAll: boolean }) => void
 }
 
 // #################################################################################################
@@ -45,21 +47,25 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
     onCancel,
     className = '',
     disabled = false,
+    selectAllActive,
+    allSelectedLabel,
   } = props
 
   const [isOpen, setIsOpen] = useState(false)
+  const [draftSelectAll, setDraftSelectAll] = useState(false)
   const [draftSelectedIds, setDraftSelectedIds] = useState<string[]>([])
 
   const listRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const selectAllRef = useRef<HTMLInputElement>(null)
 
-  // On open, copy committed selections into draft state
+  // On open, copy committed selections and selectAllActive into draft state
   useEffect(() => {
     if (isOpen) {
       setDraftSelectedIds(selectedIds)
+      setDraftSelectAll(selectAllActive ?? false)
     }
-  }, [isOpen, selectedIds])
+  }, [isOpen, selectedIds, selectAllActive])
 
   // Click outside reverts draft to match Figma cancel behavior
   useEffect(() => {
@@ -107,19 +113,31 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
       draftSelectedIds.includes(getId(item)),
     )
 
-    selectAllRef.current.indeterminate = !allSelected && someSelected
-  }, [draftSelectedIds, items, getId])
+    selectAllRef.current.indeterminate =
+      !draftSelectAll && someSelected && !allSelected
+  }, [draftSelectedIds, draftSelectAll, items, getId])
 
-  const handleToggleItem = useCallback((id: string) => {
-    setDraftSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    )
-  }, [])
+  const handleToggleItem = useCallback(
+    (id: string) => {
+      if (draftSelectAll) {
+        const allIds = items.map(getId)
+        setDraftSelectAll(false)
+        setDraftSelectedIds(allIds.filter((existing) => existing !== id))
+
+        return
+      }
+
+      setDraftSelectedIds((prev) =>
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+      )
+    },
+    [items, getId, draftSelectAll],
+  )
 
   const handleApply = useCallback(() => {
-    onApply(draftSelectedIds)
+    onApply(draftSelectedIds, { selectAll: draftSelectAll })
     setIsOpen(false)
-  }, [onApply, draftSelectedIds])
+  }, [onApply, draftSelectedIds, draftSelectAll])
 
   const handleCancel = useCallback(() => {
     setIsOpen(false)
@@ -137,33 +155,28 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
     }
   }, [hasMore, loadingMore, onLoadMore])
 
-  // Select-all operates on currently loaded items only — paginated items not yet fetched are unaffected.
+  // Select-all toggles "all in dataset" mode — when on, newly paginated items also render as selected.
   const handleSelectAll = useCallback(() => {
-    const visibleIds = items.map(getId)
-    const allSelected = visibleIds.every((id) => draftSelectedIds.includes(id))
-
-    if (allSelected) {
-      setDraftSelectedIds((prev) =>
-        prev.filter((id) => !visibleIds.includes(id)),
-      )
+    if (draftSelectAll) {
+      setDraftSelectAll(false)
+      setDraftSelectedIds([])
     } else {
-      setDraftSelectedIds((prev) => {
-        const toAdd = visibleIds.filter((id) => !prev.includes(id))
-
-        return [...prev, ...toAdd]
-      })
+      setDraftSelectAll(true)
+      setDraftSelectedIds([])
     }
-  }, [items, getId, draftSelectedIds])
-
-  const allSelected =
-    items.length > 0 &&
-    items.every((item) => draftSelectedIds.includes(getId(item)))
+  }, [draftSelectAll])
 
   const triggerLabel =
-    selectedIds.length === 0 ? placeholder : selectedLabel(selectedIds.length)
+    selectAllActive === true
+      ? (allSelectedLabel ?? selectedLabel(items.length))
+      : selectedIds.length > 0
+        ? selectedLabel(selectedIds.length)
+        : placeholder
 
   const triggerLabelClass =
-    selectedIds.length === 0 ? 'text-gray-500' : 'text-gray-900'
+    selectAllActive === true || selectedIds.length > 0
+      ? 'text-gray-900'
+      : 'text-gray-500'
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
@@ -226,7 +239,7 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
                 <input
                   ref={selectAllRef}
                   type="checkbox"
-                  checked={allSelected}
+                  checked={draftSelectAll}
                   onChange={handleSelectAll}
                   className="accent-teal-500 h-4 w-4 rounded"
                 />
@@ -270,7 +283,7 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
               {items.map((item) => {
                 const id = getId(item)
                 const label = getLabel(item)
-                const checked = draftSelectedIds.includes(id)
+                const checked = draftSelectAll || draftSelectedIds.includes(id)
 
                 return (
                   <label

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useMemo, useCallback } from 'react'
 import PurchaseCard from './PurchaseCard'
 import { MultiSelect } from './MultiSelect'
 import { NetworkStatus } from '@apollo/client'
@@ -28,10 +28,24 @@ export default function PurchasesPage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+
   const productIdsParam = searchParams.get('productIds')
   const userIdsParam = searchParams.get('userIds')
-  const committedProductIds = productIdsParam ? productIdsParam.split(',') : []
-  const committedUserIds = userIdsParam ? userIdsParam.split(',') : []
+
+  const productSelectAll = productIdsParam === '*'
+  const userSelectAll = userIdsParam === '*'
+
+  const committedProductIds = useMemo(
+    () =>
+      productIdsParam && productIdsParam !== '*'
+        ? productIdsParam.split(',')
+        : [],
+    [productIdsParam],
+  )
+  const committedUserIds = useMemo(
+    () => (userIdsParam && userIdsParam !== '*' ? userIdsParam.split(',') : []),
+    [userIdsParam],
+  )
 
   const products = usePaginatedSearch<
     Product,
@@ -51,11 +65,22 @@ export default function PurchasesPage() {
     buildVars: ({ first, after, searchTerm }) => ({ first, after, searchTerm }),
   })
 
-  const purchaseVars: PurchasesQueryVars = {
-    first: PAGE_SIZE,
-    userIds: committedUserIds.length ? committedUserIds : null,
-    productIds: committedProductIds.length ? committedProductIds : null,
-  }
+  const purchaseVars = useMemo<PurchasesQueryVars>(
+    () => ({
+      first: PAGE_SIZE,
+      userIds: userSelectAll
+        ? null
+        : committedUserIds.length
+          ? committedUserIds
+          : null,
+      productIds: productSelectAll
+        ? null
+        : committedProductIds.length
+          ? committedProductIds
+          : null,
+    }),
+    [committedProductIds, committedUserIds, productSelectAll, userSelectAll],
+  )
 
   const {
     data: purchasesData,
@@ -79,17 +104,24 @@ export default function PurchasesPage() {
   const visiblePurchases = loadingPurchases ? [] : purchases
 
   const updateUrl = useCallback(
-    (next: { productIds?: string[]; userIds?: string[] }) => {
+    (next: {
+      productIds?: string[] | '*' | null
+      userIds?: string[] | '*' | null
+    }) => {
       const params = new URLSearchParams(searchParams.toString())
       if (next.productIds !== undefined) {
-        if (next.productIds.length) {
+        if (next.productIds === '*') {
+          params.set('productIds', '*')
+        } else if (next.productIds && next.productIds.length) {
           params.set('productIds', next.productIds.join(','))
         } else {
           params.delete('productIds')
         }
       }
       if (next.userIds !== undefined) {
-        if (next.userIds.length) {
+        if (next.userIds === '*') {
+          params.set('userIds', '*')
+        } else if (next.userIds && next.userIds.length) {
           params.set('userIds', next.userIds.join(','))
         } else {
           params.delete('userIds')
@@ -102,17 +134,19 @@ export default function PurchasesPage() {
   )
 
   const handleApplyUsers = useCallback(
-    (ids: string[]) => updateUrl({ userIds: ids }),
-    [updateUrl],
-  )
-
-  const handleClearFilters = useCallback(
-    () => updateUrl({ productIds: [], userIds: [] }),
+    (ids: string[], meta: { selectAll: boolean }) =>
+      updateUrl({ userIds: meta.selectAll ? '*' : ids }),
     [updateUrl],
   )
 
   const handleApplyProducts = useCallback(
-    (ids: string[]) => updateUrl({ productIds: ids }),
+    (ids: string[], meta: { selectAll: boolean }) =>
+      updateUrl({ productIds: meta.selectAll ? '*' : ids }),
+    [updateUrl],
+  )
+
+  const handleClearFilters = useCallback(
+    () => updateUrl({ productIds: null, userIds: null }),
     [updateUrl],
   )
 
@@ -130,7 +164,10 @@ export default function PurchasesPage() {
   ])
 
   const hasFilters =
-    committedProductIds.length > 0 || committedUserIds.length > 0
+    productSelectAll ||
+    userSelectAll ||
+    committedProductIds.length > 0 ||
+    committedUserIds.length > 0
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -158,6 +195,8 @@ export default function PurchasesPage() {
             loading={products.loading}
             error={products.error}
             onApply={handleApplyProducts}
+            selectAllActive={productSelectAll}
+            allSelectedLabel="All products selected"
           />
         </div>
 
@@ -178,6 +217,8 @@ export default function PurchasesPage() {
             loading={users.loading}
             error={users.error}
             onApply={handleApplyUsers}
+            selectAllActive={userSelectAll}
+            allSelectedLabel="All users selected"
           />
         </div>
       </div>
