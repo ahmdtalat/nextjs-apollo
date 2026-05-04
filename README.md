@@ -46,7 +46,7 @@ Behaviour:
 
 - **Draft state**: opening the dropdown copies committed selections into an internal draft. Apply commits; Cancel / click-outside / Escape revert.
 - **Search**: controlled by parent so debouncing happens at the data-fetching layer.
-- **Select all**: operates on currently loaded items only — items not yet paginated are unaffected. Indeterminate when partially selected.
+- **Select all**: means "all items in the dataset" (not just currently loaded). When active, newly paginated items also render as checked. Indeterminate state when individually selected items don't cover all loaded items.
 - **Pagination**: optional infinite scroll via `onLoadMore` + `hasMore`.
 - **States**: loading, empty, no-results, error are all handled.
 - **A11y**: trigger has `aria-haspopup` + `aria-expanded`, items are clickable labels, search has `aria-label`.
@@ -60,14 +60,27 @@ Cursor-based merging is configured once in `apolloCache.ts` so `fetchMore` "just
 ## Decisions and assumptions
 
 - **Cache-driven pagination** (`typePolicies`) over a manual `useState` accumulator. Simpler, idempotent, and the canonical Apollo pattern.
+- **Filter state in URL**: filter selections live in `?productIds=...&userIds=...` via `useSearchParams` + `useRouter`. Reload preserves selections, browser back/forward navigates between filter states. Shareable URLs.
 - **Draft / commit** semantics for MultiSelect — Cancel and click-outside both revert. This matches the Figma cancel-button behaviour and avoids surprising the user when they dismiss the dropdown by accident.
 - **Always pass `first`** in queries: the mock server has a 10s delay if `first` and `last` are both omitted. Page size is 20.
 - **Server-side search** for the filters: each MultiSelect debounces 300ms and queries the server, rather than client-filtering a single `first: 100` page. This scales to the full dataset and matches what a real backend search would do.
-- **Select-all scope**: only affects currently loaded items. Documented in code. The alternative (selecting all 300 products without loading them) would require a separate "select all matching" semantic that wasn't in the spec.
-- **Product images**: the GraphQL server returns `faker.image.avatar()` (people headshots), which doesn't fit a "product card". The card swaps in `https://picsum.photos/seed/${id}/...` for deterministic, varied imagery without modifying the server.
+- **Select-all = "all in dataset"**: rather than materializing every ID into the URL, select-all sets a `*` sentinel (`?productIds=*`). The server query then omits the `productIds` filter (returns all matching purchases). Keeps URLs short and survives a future dataset growing.
+- **Product images**: the GraphQL server returns `faker.image.avatar()` (people headshots) which doesn't fit product cards. The card uses **Loremflickr** (`https://loremflickr.com/400/300/{productName}?lock={seed}`) as primary — Flickr-tag search by product name gives images that loosely match — with **Picsum** as `onError` fallback for guaranteed render.
 - **Styling**: Tailwind utility classes only, no UI library. The brand teal (`teal-500/600`) is used for the Apply button, checked checkboxes, and the Clear/Load-more accents.
 - **Responsive**: filters stack on mobile, side-by-side on `sm`+; grid steps from 1 → 2 → 3 → 4 columns; the dropdown stays anchored (no full-screen modal — the dataset and item rows fit comfortably on phones).
 
+## Tests
+
+```sh
+npm run test           # one-shot run (Vitest)
+npm run test:watch     # watch mode
+npm run test:coverage  # with coverage report
+```
+
+- **Unit tests** for `MultiSelect` (25 cases): trigger label states, draft/commit, click-outside / Escape / Cancel revert, search interactions, individual + select-all toggles, indeterminate state, empty/loading/no-results/error, infinite scroll.
+- **Integration tests** for `PurchasesPage` (6 cases) using Apollo's `MockedProvider` and a mocked `next/navigation`: URL parsing into committed state, `*` sentinel round-trip, apply pushes URL, clear removes params, query receives correct variables.
+- Coverage scoped to `MultiSelect.tsx` (94.8% statements, 97% lines) and `PurchasesPage.tsx` (83.3% statements, 84.7% lines).
+
 ## Time spent
 
-Roughly 4–5 hours, mostly on the Apollo 4 + typePolicies pagination wiring and getting the staircase code style right. See AI-SUPPORT.md.
+Under 4 hours of focused work, despite spreading across two days. Most of the time was on the Apollo 4 + typePolicies pagination wiring, the URL filter state + `*` sentinel design, the test suite, and a pre-submission code review pass. See AI-SUPPORT.md.

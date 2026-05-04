@@ -29,4 +29,5 @@ export interface Purchase {
 export interface Connection<T> {
   nodes: T[]
   pageInfo: PageInfo
+  __typename?: string
 }
